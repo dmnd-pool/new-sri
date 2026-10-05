@@ -1,139 +1,104 @@
+# roles_logic_sv2
 
-<h1 align="center">
-  <br>
-  <a href="https://stratumprotocol.org"><img src="https://github.com/stratum-mining/stratumprotocol.org/blob/660ecc6ccd2eca82d0895cef939f4670adc6d1f4/src/.vuepress/public/assets/stratum-logo%402x.png" alt="SRI" width="200"></a>
-  <br>
-Stratum V2 Reference Implementation (SRI)
-  <br>
-</h1>
+Standalone copy of `../stratum/protocols/v2/roles-logic-sv2`, retaining its pool,
+proxy, routing, job creation, and handler APIs while using the protocol libraries
+from [SRI v1.12.0](https://github.com/stratum-mining/stratum/releases/tag/v1.12.0).
+The source snapshot is from the local Stratum checkout at
+`f037e6db3568454cdf7973aa6f457dd41d0856e1`, including its pool-specific channel
+restoration, job variants, and fanout methods.
 
-<h4 align="center">SRI is a reference implementation of the Stratum V2 protocol written in Rust 🦀.</h4>
+## Use in a pool
 
-<p align="center">
-  <a href="https://codecov.io/gh/stratum-mining/stratum">
-    <img src="https://codecov.io/gh/stratum-mining/stratum/branch/main/graph/badge.svg" alt="codecov">
-  </a>
-  <a href="https://twitter.com/intent/follow?screen_name=stratumv2">
-    <img src="https://img.shields.io/twitter/follow/stratumv2?style=social" alt="X (formerly Twitter) Follow">
-  </a>
-</p>
+```toml
+[dependencies]
+roles_logic_sv2 = { path = "../roles-logic-sv2" }
+```
 
-## 💼 Table of Contents
+Keep using the existing `roles_logic_sv2` modules, message struct literals,
+handler traits, parser enum variants, and `into_static()` / `as_static()` methods.
+`Target`, `Extranonce`, and `ExtendedExtranonce` remain under
+`roles_logic_sv2::mining_sv2`. The `prop_test` and `disable_nopanic` features remain
+available. `prop_test` also retains the template message generators.
 
-<p align="center">
-  <a href="#-introduction">Introduction</a> •
-  <a href="#%EF%B8%8F-getting-started">Getting Started</a> •
-  <a href="#-use-cases">Use Cases</a> •
-  <a href="#-roadmap">Roadmap</a> •
-  <a href="#-contribute">Contribute</a> •
-  <a href="#-support">Support</a> •
-  <a href="#-donate">Donate</a> •
-  <a href="#-supporters">Supporters</a> •
-  <a href="#-license">License</a> 
-  <a href="#-msrv">MSRV</a>
-</p>
+The adapters in `src/compat` keep the old Rust interface and delegate wire codecs
+to the released crates. They retain owned message data because SRI now separates
+borrowed and owned types. Standard-channel request IDs still borrow the received
+payload so proxy ID remapping updates relayed bytes.
 
-## 👋 Introduction
+### Direct dependency imports
 
-Welcome to the official GitHub repository for the **SRI - Stratum V2 Reference Implementation**. 
+SRI's new binary and message types are different Rust types. If your pool imports
+those types directly from another dependency, use the matching compatibility
+imports at the roles-logic boundary:
 
-[Stratum V2](https://stratumprotocol.org) is a next-generation bitcoin mining protocol designed to enhance the efficiency, security, flexibility and decentralization. 
-SRI is fully open-source, community-developed, independent of any single entity, aiming to be fully compatible with [Stratum V2 Specification](https://github.com/stratum-mining/sv2-spec).
+```rust
+use roles_logic_sv2::{binary_sv2, mining_sv2, template_distribution_sv2};
+```
 
-## ⛏️ Getting Started
+Conversions to and from SRI's current owned messages are also available through
+`From` / `Into`. Bitcoin types remain compatible with `bitcoin` 0.32.
 
-To get started with the Stratum V2 Reference Implementation (SRI), please follow the detailed setup instructions available on the official website:
+Transport code using the old external `codec_sv2::Frame` / `StandardEitherFrame`
+API needs adaptation to codec 7; this library cannot restore names inside another
+crate. Every parser enum converts into the current `framing_sv2::MessageFrame`.
+The additive `roles_logic_sv2::framing_sv2` facade also provides the old generic
+`Sv2Frame<T, B>`, which implements the current codec's `EncodableFrame` trait.
+Received current `SerializedFrame` values convert into that compatibility frame.
+Factory and handler APIs do not require a rewrite.
 
-[Getting Started with Stratum V2](https://stratumprotocol.org/getting-started/)
+## Release dependencies
 
-This guide provides all the necessary information on prerequisites, installation, and configuration to help you begin using, testing or contributing to SRI.
+| Crate | Version |
+| --- | --- |
+| `binary_sv2` | 7.0.0 |
+| `derive_codec_sv2` (transitive) | 2.0.0 |
+| `common_messages_sv2` | 9.0.0 |
+| `mining_sv2` | 12.0.0 |
+| `job_declaration_sv2` | 10.0.0 |
+| `template_distribution_sv2` | 7.0.0 |
+| `framing_sv2` | 8.0.0 |
+| `codec_sv2` (test dependency) | 7.0.0 |
+| `noise_sv2` (via the test codec) | 2.0.0 |
 
-## 🚀 Use Cases
+There are no dependencies on the sibling checkout or old SRI protocol versions.
+The former `const_sv2` constants now come from the current subprotocol crates;
+`stratum-common` is replaced by its underlying Bitcoin dependency. Role logic is
+retained here, so this is not a replacement with the unrelated `channels_sv2`,
+`handlers_sv2`, or `parsers_sv2` APIs or a backport of all their behavioral changes.
 
-The library is modular to address different use-cases and desired functionality. Examples include:
+## Protocol changes with compatibility defaults
 
-### 👷 Miners
+Keeping a Rust field does not put a removed field back on the wire:
 
-- SV1 Miners can use the translator proxy (`roles/translator`) to connect with a SV2-compatible pool.
-- SV1 mining farms mining to a SV2-compatible pool gain some of the security and efficiency improvements SV2 offers over Stratum V1 (SV1). The SV1<->SV2 translator proxy does not support  _all_ the features of SV2, but works as a temporary measure before upgrading completely to SV2-compatible firmware. (The SV1<->SV2 translation proxy implementation is a work in progress.)
+| Legacy interface | SRI v1.12.0 behavior |
+| --- | --- |
+| `CoinbaseOutputDataSize` | Encodes `CoinbaseOutputConstraints`, reserving `min(size * 20, 20_000)` additional sigops conservatively. The current `CoinbaseOutputConstraints` type is also exposed for an explicit budget. |
+| `OpenExtendedMiningChannelSuccess` | Encodes group ID zero; decoding discards the new group ID. The retained factories dispatch extended work by individual channel. Group-aware transport must retain the current SRI message separately. |
+| `AllocateMiningJobTokenSuccess` | Encodes the token and outputs. Decoding derives the old size from output bytes and sets `async_mining_allowed = true`. |
+| `SetCustomMiningJob` | The removed reward and extranonce-size fields decode as zero. Complete output amounts are preserved when reconstructing a job; extranonce length comes from channel state. Nonzero locally supplied legacy rewards still override the first output. |
+| `DeclareMiningJob::tx_list` | Represents **wtxids** on the current wire. A caller providing txids must compute wtxids from its transactions; hashes alone cannot be converted. |
+| `set_async_job_nogotiation()` | Retains its name but sets the current JD full-template-mode flag. Flag validation follows the current protocol. |
+| `SubmitSolutionJd` | Encodes `PushSolution`, with the current nonce/ntime field order. |
+| `Mining::Reconnect` | Retains its enum variant and uses the current common-protocol message ID `0x04`. |
 
-### 🛠️ Pools
+The existing Rust-facing C message wrappers and exported C conversion/free helpers
+are retained as well. Raw C handles retain their ownership contract: owned buffers
+must be freed exactly once.
 
-- Pools supporting SV2 can deploy the open source binary crate (`roles/pool`) to offer their clients (miners participating in said pool) an SV2-compatible pool.
-- The Rust helper library provides a suite of tools for mining pools to build custom SV2 compatible pool implementations.
-- The C library provides a set of FFI bindings to the Rust helper library for miners to integrate SV2 into their existing firmware stack.
+## Verification
 
-## 🛣 Roadmap 
+```sh
+cargo fmt --all -- --check
+cargo test --locked
+cargo test --locked --all-features
+```
 
-Our roadmap is publicly available, outlining current and future plans. Decisions on the roadmap are made through a consensus-driven approach, through participation on dev meetings, Discord or GitHub.
+Tests retain the original mining round, channel restoration, fanout, and job
+variant checks. Additional tests compare all 41 message schemas with independent
+current-wire fixtures, exercise the released codec, preserve proxy request-ID
+mutation, roundtrip C wrappers, and run a pool-style handler and custom job against
+current SRI messages. One upstream job-dispatcher test remains marked ignored.
+`tests/pool_api.rs` checks the API used by the sibling pool; it is not a full
+end-to-end run of that pool's networking stack.
 
-[View the SRI Roadmap](https://github.com/orgs/stratum-mining/projects/5)
-
-### 🏅 Project Maturity
-
-Low-level crates (`protocols` directory) are considered **beta** software. Rust API Docs is a [work-in-progress](https://github.com/stratum-mining/stratum/issues/845), and the community should still expect small breaking API changes and patches.
-
-Application-level crates (`roles` directory) are considered **alpha** software, and bugs are expected. They should be used as a guide on how to consume the low-level crates as dependencies.
-
-### 🎯 Goals
-
-The goals of this project are to provide:
-
-1. A robust set of Stratum V2 (SV2) primitives as Rust library crates which anyone can use
-   to expand the protocol or implement a role. For example:
-   - Pools supporting SV2
-   - Mining-device/hashrate producers integrating SV2 into their firmware
-   - Bitcoin nodes implementing Template Provider to build the `blocktemplate`
-2. The above Rust primitives as a C library available for use in other languages via FFI.
-3. A set of helpers built on top of the above primitives and the external Bitcoin-related Rust crates for anyone to implement the SV2 roles.
-4. An open-source implementation of a SV2 proxy for miners.
-5. An open-source implementation of a SV2 pool for mining pool operators.
-
-## 💻 Contribute 
-
-If you are a developer looking to help, but you're not sure where to begin, check the [good first issue label](https://github.com/stratum-mining/stratum/labels/good%20first%20issue), which contains small pieces of work that have been specifically flagged as being friendly to new contributors.
-
-Contributors looking to do something a bit more challenging, before opening a pull request, please join [our community chat](https://discord.gg/fsEW23wFYs) or [start a GitHub issue](https://github.com/stratum-mining/stratum/issues) to get early feedback, discuss the best ways to tackle the problem, and ensure there is no work duplication and consensus.
-
-## 🤝 Support
-
-Join our Discord community to get help, share your ideas, or discuss anything related to Stratum V2 and its reference implementation. 
-
-Whether you're looking for technical support, want to contribute, or are just interested in learning more about the project, our community is the place to be.
-
-[Join the Stratum V2 Discord Community](https://discord.gg/fsEW23wFYs)
-
-## 🎁 Donate
-
-### 👤 Individual Donations 
-If you wish to support the development and maintenance of the Stratum V2 Reference Implementation, individual donations are greatly appreciated. You can donate through OpenSats, a 501(c)(3) public charity dedicated to supporting open-source Bitcoin projects.
-
-[Donate through OpenSats](https://opensats.org/projects/stratumv2)
-
-### 🏢 Corporate Donations
-For corporate entities interested in providing more substantial support, such as grants to SRI contributors, please get in touch with us directly. Your support can make a significant difference in accelerating development, research, and innovation.
-
-Email us at: stratumv2@gmail.com
-
-## 🙏 Supporters
-
-SRI contributors are independently, financially supported by following entities: 
-
-<p float="left">
-  <a href="https://hrf.org"><img src="https://raw.githubusercontent.com/stratum-mining/stratumprotocol.org/main/src/.vuepress/public/assets/hrf-logo-boxed.svg" width="250" /></a>
-  <a href="https://spiral.xyz"><img src="https://raw.githubusercontent.com/stratum-mining/stratumprotocol.org/main/src/.vuepress/public/assets/Spiral-logo-boxed.svg" width="250" /></a>
-  <a href="https://opensats.org/"><img src="https://raw.githubusercontent.com/stratum-mining/stratumprotocol.org/main/src/.vuepress/public/assets/opensats-logo-boxed.svg" width="250" /></a>
-  <a href="https://vinteum.org/"><img src="https://raw.githubusercontent.com/stratum-mining/stratumprotocol.org/main/src/.vuepress/public/assets/vinteum-logo-boxed.png" width="250" /></a>
-</p>
-
-## 📖 License
-This software is licensed under Apache 2.0 or MIT, at your option.
-
-## 🦀 MSRV
-Minimum Supported Rust Version: 1.75.0
-
----
-
-> Website [stratumprotocol.org](https://www.stratumprotocol.org) &nbsp;&middot;&nbsp;
-> Discord [SV2 Discord](https://discord.gg/fsEW23wFYs) &nbsp;&middot;&nbsp;
-> Twitter [@Stratumv2](https://twitter.com/StratumV2)
+Licensed under MIT OR Apache-2.0; see `LICENSE-MIT` and `LICENSE-APACHE`.
