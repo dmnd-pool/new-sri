@@ -4,7 +4,7 @@
 
 use crate::{common_properties::StandardChannel, parsers::Mining, Error};
 
-use mining_sv2::{
+use crate::compat::mining_sv2::{
     NewExtendedMiningJob, NewMiningJob, OpenStandardMiningChannelSuccess, SetNewPrevHash,
 };
 
@@ -25,7 +25,7 @@ impl GroupChannels {
         }
     }
     /// Called when when a group channel created. We add the channel in its
-    /// respective group and call [`GroupChannel::on_channel_success_for_hom_downtream`]
+    /// respective group and call `GroupChannel::on_channel_success_for_hom_downtream`
     pub fn on_channel_success_for_hom_downtream(
         &mut self,
         m: &OpenStandardMiningChannelSuccess,
@@ -216,7 +216,7 @@ impl GroupChannel {
 #[cfg(test)]
 mod test {
     use super::*;
-    use binary_sv2::B064K;
+    use crate::compat::binary_sv2::B064K;
     use std::convert::TryFrom;
 
     #[test]
@@ -225,7 +225,7 @@ mod test {
         let mut new_extended_mining_job = NewExtendedMiningJob {
             channel_id: 1,
             job_id: 0,
-            min_ntime: binary_sv2::Sv2Option::new(None),
+            min_ntime: crate::binary_sv2::Sv2Option::new(None),
             version: 0,
             version_rolling_allowed: false,
             merkle_path: vec![].into(),

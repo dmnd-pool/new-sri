@@ -16,9 +16,12 @@
 //!
 //! This crate can be built with the following features:
 //!
-//! - `prop_test`: Enables support for property testing in [`template_distribution_sv2`] crate.
+//! - `prop_test`: Enables the retained template and job property tests.
+extern crate alloc;
+
 pub mod channel_logic;
 pub mod common_properties;
+mod compat;
 pub mod errors;
 pub mod handlers;
 pub mod job_creator;
@@ -27,8 +30,8 @@ pub mod parsers;
 pub mod routing_logic;
 pub mod selectors;
 pub mod utils;
-pub use common_messages_sv2;
+pub use compat::{
+    binary_sv2, common_messages_sv2, framing_sv2, job_declaration_sv2, mining_sv2,
+    template_distribution_sv2,
+};
 pub use errors::Error;
-pub use job_declaration_sv2;
-pub use mining_sv2;
-pub use template_distribution_sv2;

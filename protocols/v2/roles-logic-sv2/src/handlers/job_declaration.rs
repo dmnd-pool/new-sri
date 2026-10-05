@@ -34,9 +34,9 @@ use std::sync::Arc;
 /// see [`SendTo_`]
 pub type SendTo = SendTo_<JobDeclaration<'static>, ()>;
 use super::SendTo_;
+use crate::compat::job_declaration_sv2::*;
 use crate::errors::Error;
 use core::convert::TryInto;
-use job_declaration_sv2::*;
 use tracing::{debug, error, info, trace};
 
 /// A trait for parsing and handling SV2 job declaration messages sent by a server.

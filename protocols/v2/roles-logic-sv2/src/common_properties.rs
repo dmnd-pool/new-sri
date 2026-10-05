@@ -5,11 +5,11 @@
 //! and channel management. These definitions form the foundation for consistent communication and
 //! behavior across Sv2 roles/applications.
 
+use crate::compat::common_messages_sv2::{has_requires_std_job, Protocol, SetupConnection};
+use crate::compat::mining_sv2::{Extranonce, Target};
 use crate::selectors::{
     DownstreamMiningSelector, DownstreamSelector, NullDownstreamMiningSelector,
 };
-use common_messages_sv2::{has_requires_std_job, Protocol, SetupConnection};
-use mining_sv2::{Extranonce, Target};
 use nohash_hasher::BuildNoHashHasher;
 use std::{collections::HashMap, fmt::Debug as D};
 

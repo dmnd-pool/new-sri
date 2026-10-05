@@ -3,11 +3,11 @@
 //! This module defines error types and utilities for handling errors in the `roles_logic_sv2`
 //! module. It includes the [`Error`] enum for representing various errors.
 
+use crate::compat::binary_sv2::Error as BinarySv2Error;
 use crate::{
     common_properties::CommonDownstreamData, parsers::PoolMessages as AllMessages,
     utils::InputError,
 };
-use binary_sv2::Error as BinarySv2Error;
 use std::fmt::{self, Display, Formatter};
 
 /// Error enum

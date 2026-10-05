@@ -27,9 +27,8 @@
 //! - Support for managing mining channels, extranonce prefixes, and share submissions, while
 //!   handling edge cases and ensuring the correctness of the mining process.
 
-use crate::{common_properties::RequestIdMapper, errors::Error, parsers::Mining};
-use core::convert::TryInto;
-use mining_sv2::{
+use crate::compat::binary_sv2;
+use crate::compat::mining_sv2::{
     CloseChannel, NewExtendedMiningJob, NewMiningJob, OpenExtendedMiningChannel,
     OpenExtendedMiningChannelSuccess, OpenMiningChannelError, OpenStandardMiningChannel,
     OpenStandardMiningChannelSuccess, Reconnect, SetCustomMiningJob, SetCustomMiningJobError,
@@ -37,6 +36,8 @@ use mining_sv2::{
     SubmitSharesError, SubmitSharesExtended, SubmitSharesStandard, SubmitSharesSuccess,
     UpdateChannel, UpdateChannelError,
 };
+use crate::{common_properties::RequestIdMapper, errors::Error, parsers::Mining};
+use core::convert::TryInto;
 
 use crate::{
     common_properties::{IsMiningDownstream, IsMiningUpstream},
@@ -46,8 +47,8 @@ use crate::{
 
 use super::SendTo_;
 
+use crate::compat::const_sv2::*;
 use crate::utils::Mutex;
-use const_sv2::*;
 use std::{fmt::Debug as D, sync::Arc};
 use tracing::{debug, error, info, trace};
 

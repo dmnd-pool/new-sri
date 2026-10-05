@@ -22,6 +22,10 @@
 //! - Consider hiding all traits from the public API and exporting only marker traits.
 //! - Improve upstream selection logic to be configurable by the caller.
 
+use crate::compat::common_messages_sv2::{
+    has_requires_std_job, Protocol, SetupConnection, SetupConnectionSuccess,
+};
+use crate::compat::mining_sv2::{OpenStandardMiningChannel, OpenStandardMiningChannelSuccess};
 use crate::{
     common_properties::{CommonDownstreamData, IsMiningDownstream, IsMiningUpstream, PairSettings},
     selectors::{
@@ -31,10 +35,6 @@ use crate::{
     utils::{Id, Mutex},
     Error,
 };
-use common_messages_sv2::{
-    has_requires_std_job, Protocol, SetupConnection, SetupConnectionSuccess,
-};
-use mining_sv2::{OpenStandardMiningChannel, OpenStandardMiningChannelSuccess};
 use std::{collections::HashMap, fmt::Debug as D, marker::PhantomData, sync::Arc};
 
 /// Defines routing logic for common protocol messages.

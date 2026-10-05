@@ -9,7 +9,7 @@
 pub mod channel_factory;
 pub mod proxy_group_channel;
 
-use mining_sv2::{NewExtendedMiningJob, NewMiningJob};
+use crate::compat::mining_sv2::{NewExtendedMiningJob, NewMiningJob};
 use std::convert::TryInto;
 
 /// Convert extended to standard job by calculating the merkle root

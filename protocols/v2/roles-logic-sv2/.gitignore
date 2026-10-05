@@ -1,0 +1,5 @@
+/target
+/.nvimlog
+/.codex/
+/.agents/
+/.aws/

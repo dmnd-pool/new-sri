@@ -20,7 +20,13 @@
 //! - **Mining Protocol**: Manages standard mining communication (e.g., job dispatch, shares
 //!   submission).
 
-use crate::Error;
+use crate::{
+    compat::{
+        binary_sv2, common_messages_sv2, const_sv2, framing_sv2, job_declaration_sv2, mining_sv2,
+        template_distribution_sv2,
+    },
+    Error,
+};
 
 use binary_sv2::{
     decodable::{DecodableField, FieldMarker},
@@ -1210,106 +1216,154 @@ impl<'a> TryFrom<PoolMessages<'a>> for MiningDeviceMessages<'a> {
     }
 }
 
+// Keep the legacy frame conversions above, and also accept the outbound frame
+// used by the current SRI codec. The protocol metadata stays in one place.
+macro_rules! impl_message_frame {
+    ($($message:ident),+ $(,)?) => {
+        $(
+            impl<'a> TryFrom<$message<'a>> for ::framing_sv2::framing::MessageFrame<$message<'a>> {
+                type Error = Error;
+
+                fn try_from(message: $message<'a>) -> Result<Self, Error> {
+                    let message_type = message.message_type();
+                    let channel_bit = message.channel_bit();
+                    Self::from_message(message, message_type, 0, channel_bit)
+                        .map_err(|_| Error::BadPayloadSize)
+                }
+            }
+        )+
+    };
+}
+
+impl_message_frame!(
+    CommonMessages,
+    Mining,
+    JobDeclaration,
+    TemplateDistribution,
+    PoolMessages,
+    MiningDeviceMessages,
+);
+
 #[cfg(test)]
 mod test {
-    use crate::{
-        mining_sv2::NewMiningJob,
-        parsers::{Mining, PoolMessages},
-    };
-    use binary_sv2::{Sv2Option, U256};
-    use codec_sv2::StandardSv2Frame;
-    use std::convert::{TryFrom, TryInto};
+    use super::*;
+    use crate::compat::binary_sv2::{Sv2Option, U256};
+    use ::codec_sv2::{Decoded, Decoder, Encoder, MessageFrame};
 
-    pub type Message = PoolMessages<'static>;
-    pub type StdFrame = StandardSv2Frame<Message>;
+    const NEW_MINING_JOB_FRAME: &[u8] = &[
+        0, 128, 21, 49, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 1, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+        20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42,
+        43, 44, 45, 46, 47, 48,
+    ];
 
-    #[test]
-    fn new_mining_job_serialization() {
-        const CORRECTLY_SERIALIZED_MSG: &'static [u8] = &[
-            0, 128, 21, 49, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 1, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
-            19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
-            41, 42, 43, 44, 45, 46, 47, 48,
-        ];
-        let mining_message = PoolMessages::Mining(Mining::NewMiningJob(NewMiningJob {
+    fn new_mining_job() -> PoolMessages<'static> {
+        PoolMessages::Mining(Mining::NewMiningJob(NewMiningJob {
             channel_id: u32::from_le_bytes([1, 2, 3, 4]),
             job_id: u32::from_le_bytes([5, 6, 7, 8]),
             min_ntime: Sv2Option::new(Some(u32::from_le_bytes([9, 10, 11, 12]))),
             version: u32::from_le_bytes([13, 14, 15, 16]),
             merkle_root: U256::try_from((17_u8..(17 + 32)).collect::<Vec<u8>>()).unwrap(),
+        }))
+    }
+
+    #[test]
+    fn new_mining_job_serialization() {
+        let frame = MessageFrame::try_from(new_mining_job()).unwrap();
+        assert_eq!(frame.encoded_length(), NEW_MINING_JOB_FRAME.len());
+        let mut encoder = Encoder::new();
+        let encoded = encoder.encode(frame).unwrap();
+        let encoded: &[u8] = encoded.as_ref();
+        assert_eq!(encoded, NEW_MINING_JOB_FRAME);
+    }
+
+    #[test]
+    fn current_codec_round_trip_preserves_parser_messages() {
+        let mut decoder = Decoder::new();
+        let mut offset = 0;
+        let mut frame = loop {
+            let writable = decoder.writable();
+            let end = offset + writable.len();
+            writable.copy_from_slice(&NEW_MINING_JOB_FRAME[offset..end]);
+            offset = end;
+            match decoder.next_frame().unwrap() {
+                Decoded::Incomplete(_) => {}
+                Decoded::Frame(frame) => break frame,
+            }
+        };
+        assert_eq!(offset, NEW_MINING_JOB_FRAME.len());
+        assert!(frame.header().channel_msg());
+        assert_eq!(frame.header().ext_type_without_channel_msg(), 0);
+        let parsed: PoolMessages = (frame.header().msg_type(), frame.payload())
+            .try_into()
+            .unwrap();
+        let mut encoder = Encoder::new();
+        let encoded = encoder
+            .encode(MessageFrame::try_from(parsed).unwrap())
+            .unwrap();
+        let encoded: &[u8] = encoded.as_ref();
+        assert_eq!(encoded, NEW_MINING_JOB_FRAME);
+    }
+
+    #[test]
+    fn legacy_frames_work_with_current_codec() {
+        let frame = Sv2Frame::<PoolMessages, Vec<u8>>::try_from(new_mining_job()).unwrap();
+        let mut encoder = Encoder::new();
+        let encoded = encoder.encode(frame).unwrap();
+        let encoded: &[u8] = encoded.as_ref();
+        assert_eq!(encoded, NEW_MINING_JOB_FRAME);
+
+        let mut frame =
+            Sv2Frame::<PoolMessages, Vec<u8>>::from_bytes(NEW_MINING_JOB_FRAME.to_vec()).unwrap();
+        assert_eq!(
+            frame.get_header().unwrap().msg_type(),
+            MESSAGE_TYPE_NEW_MINING_JOB
+        );
+        let parsed: PoolMessages = (MESSAGE_TYPE_NEW_MINING_JOB, frame.payload())
+            .try_into()
+            .unwrap();
+        let frame = Sv2Frame::<PoolMessages, Vec<u8>>::try_from(parsed).unwrap();
+        let mut output = vec![0xff; NEW_MINING_JOB_FRAME.len() + 8];
+        frame.serialize(&mut output).unwrap();
+        assert_eq!(&output[..NEW_MINING_JOB_FRAME.len()], NEW_MINING_JOB_FRAME);
+        assert_eq!(&output[NEW_MINING_JOB_FRAME.len()..], &[0xff; 8]);
+    }
+
+    #[test]
+    fn unknown_message_types_are_rejected() {
+        let mut payload = [];
+        assert!(matches!(
+            PoolMessages::try_from((0xff, payload.as_mut_slice())),
+            Err(Error::UnexpectedMessage(0xff))
+        ));
+    }
+
+    #[test]
+    fn reconnect_uses_current_wire_type_and_legacy_mining_variant() {
+        let message = PoolMessages::Mining(Mining::Reconnect(Reconnect {
+            new_host: "pool.example".to_string().try_into().unwrap(),
+            new_port: 3333,
         }));
-        message_serialization_check(mining_message, CORRECTLY_SERIALIZED_MSG);
-    }
-
-    fn message_serialization_check(message: PoolMessages<'static>, expected_result: &[u8]) {
-        let frame = StdFrame::try_from(message).unwrap();
-        let encoded_frame_length = frame.encoded_length();
-
-        let mut buffer = [0; 0xffff];
-        frame.serialize(&mut buffer).unwrap();
-        check_length_consistency(&buffer[..encoded_frame_length]);
-        check_length_consistency(&expected_result);
+        let mut encoder = Encoder::new();
+        let encoded = encoder
+            .encode(MessageFrame::try_from(message).unwrap())
+            .unwrap();
+        let encoded: &[u8] = encoded.as_ref();
+        let mut frame =
+            ::framing_sv2::framing::SerializedFrame::from_bytes(encoded.to_vec()).unwrap();
         assert_eq!(
-            is_channel_msg(&buffer),
-            is_channel_msg(&expected_result),
-            "Unexpected channel_message flag",
+            frame.header().msg_type(),
+            ::common_messages_sv2::MESSAGE_TYPE_RECONNECT
         );
-        assert_eq!(
-            extract_extension_type(&buffer),
-            extract_extension_type(&expected_result),
-            "Unexpected extension type",
-        );
-        assert_eq!(
-            extract_message_type(&buffer),
-            extract_message_type(&expected_result),
-            "Unexpected message type",
-        );
-        assert_eq!(
-            extract_payload_length(&buffer),
-            extract_payload_length(&expected_result),
-            "Unexpected message length",
-        );
-        assert_eq!(
-            encoded_frame_length as u32,
-            expected_result.len() as u32,
-            "Method encoded_length() returned different length than the actual message length",
-        );
-        assert_eq!(
-            extract_payload(&buffer[..encoded_frame_length]),
-            extract_payload(&expected_result),
-            "Unexpected payload",
-        )
-    }
-
-    fn is_channel_msg(serialized_frame: &[u8]) -> bool {
-        let array_repre = serialized_frame[..2].try_into().unwrap();
-        let decoded_extension_type = u16::from_le_bytes(array_repre);
-        (decoded_extension_type & (1 << 15)) != 0
-    }
-    fn extract_extension_type(serialized_frame: &[u8]) -> u16 {
-        let array_repre = serialized_frame[..2].try_into().unwrap();
-        let decoded_extension_type = u16::from_le_bytes(array_repre);
-        decoded_extension_type & (u16::MAX >> 1)
-    }
-    fn extract_message_type(serialized_frame: &[u8]) -> u8 {
-        serialized_frame[2]
-    }
-    fn extract_payload_length(serialized_frame: &[u8]) -> u32 {
-        let mut array_repre = [0; 4];
-        array_repre[..3].copy_from_slice(&serialized_frame[3..6]);
-        u32::from_le_bytes(array_repre)
-    }
-    fn extract_payload(serialized_frame: &[u8]) -> &[u8] {
-        assert!(serialized_frame.len() > 6);
-        &serialized_frame[6..]
-    }
-
-    fn check_length_consistency(serialized_frame: &[u8]) {
-        let message_length = extract_payload_length(serialized_frame) as usize;
-        let payload_length = extract_payload(serialized_frame).len();
-        assert_eq!(
-            message_length, payload_length,
-            "Header declared length [{} bytes] differs from the actual payload length [{} bytes]",
-            message_length, payload_length,
-        );
+        assert!(!frame.header().channel_msg());
+        let message: PoolMessages = (frame.header().msg_type(), frame.payload())
+            .try_into()
+            .unwrap();
+        match message {
+            PoolMessages::Mining(Mining::Reconnect(message)) => {
+                assert_eq!(message.new_host.as_ref(), b"pool.example");
+                assert_eq!(message.new_port, 3333);
+            }
+            _ => panic!("Reconnect must keep its legacy Mining variant"),
+        }
     }
 }

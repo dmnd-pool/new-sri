@@ -2,12 +2,9 @@
 //!
 //! This module provides logic to create extended mining jobs given a template from
 //! a template provider as well as logic to clean up old templates when new blocks are mined.
-use crate::{errors, utils::Id, Error};
-use binary_sv2::B064K;
-use mining_sv2::NewExtendedMiningJob;
-use nohash_hasher::BuildNoHashHasher;
-use std::{collections::HashMap, convert::TryInto};
-use stratum_common::{
+use crate::compat::binary_sv2::B064K;
+use crate::compat::mining_sv2::NewExtendedMiningJob;
+use crate::compat::stratum_common::{
     bitcoin,
     bitcoin::{
         absolute::LockTime,
@@ -20,7 +17,11 @@ use stratum_common::{
         Amount,
     },
 };
-use template_distribution_sv2::{NewTemplate, SetNewPrevHash};
+use crate::compat::template_distribution_sv2::{NewTemplate, SetNewPrevHash};
+use crate::compat::{binary_sv2, mining_sv2};
+use crate::{errors, utils::Id, Error};
+use nohash_hasher::BuildNoHashHasher;
+use std::{collections::HashMap, convert::TryInto};
 use tracing::debug;
 
 #[derive(Debug)]
@@ -38,15 +39,11 @@ pub struct JobsCreators {
 /// It assumes the data to be valid data and does not do any kind of check
 pub fn tx_outputs_to_costum_scripts(tx_outputs: &[u8]) -> Vec<TxOut> {
     let mut txs = vec![];
-    let mut cursor = 0;
-    let mut txouts = &tx_outputs[cursor..];
+    let mut txouts = tx_outputs;
     while let Ok(out) = TxOut::consensus_decode(&mut txouts) {
-        let len = match out.script_pubkey.len() {
-            a @ 0..=252 => 8 + 1 + a,
-            a @ 253..=10000 => 8 + 3 + a,
-            _ => break,
-        };
-        cursor += len;
+        if out.script_pubkey.len() > 10_000 {
+            break;
+        }
         txs.push(out)
     }
     txs
@@ -68,7 +65,7 @@ impl JobsCreators {
 
     /// Get template id from job
     pub fn get_template_id_from_job(&self, job_id: u32) -> Option<u64> {
-        self.job_to_template_id.get(&job_id).map(|x| x - 1)
+        self.job_to_template_id.get(&job_id).copied()
     }
 
     /// Used to create new jobs when a new template arrives
@@ -81,12 +78,16 @@ impl JobsCreators {
     ) -> Result<NewExtendedMiningJob<'static>, Error> {
         let server_tx_outputs = template.coinbase_tx_outputs.to_vec();
         let mut outputs = tx_outputs_to_costum_scripts(&server_tx_outputs);
+        // A template leaves the pool reward unassigned. A custom job, in contrast,
+        // already contains complete outputs and must retain their values.
+        pool_coinbase_outputs
+            .first_mut()
+            .ok_or(Error::EmptyCoinbaseOutputs)?
+            .value = Amount::from_sat(template.coinbase_tx_value_remaining);
         pool_coinbase_outputs.append(&mut outputs);
 
-        // This is to make sure that 0 is never used, so we can use 0 for
-        // set_new_prev_hashes that do not refer to any future job/template if needed
-        // Then we will do the inverse (-1) where needed
-        let template_id = template.template_id + 1;
+        // Template IDs span all of u64; Option already represents a missing ID.
+        let template_id = template.template_id;
         self.lasts_new_template.push(template.as_static());
         let next_job_id = self.ids.next();
         self.job_to_template_id.insert(next_job_id, template_id);
@@ -129,9 +130,7 @@ impl JobsCreators {
             1 => {
                 self.reset_new_templates(Some(template[0].clone()));
 
-                self.templte_to_job_id
-                    .get(&(prev_hash.template_id + 1))
-                    .copied()
+                self.templte_to_job_id.get(&prev_hash.template_id).copied()
             }
             // TODO how many templates can we have at max
             _ => todo!("{:#?}", template.len()),
@@ -152,6 +151,14 @@ pub fn extended_job_from_custom_job(
 ) -> Result<NewExtendedMiningJob<'static>, Error> {
     let mut outputs =
         tx_outputs_to_costum_scripts(referenced_job.coinbase_tx_outputs.clone().as_ref());
+    // Locally constructed legacy jobs can still supply a reward separately.
+    // Decoded v1.12 jobs set this removed field to zero and carry complete outputs.
+    if referenced_job.coinbase_tx_value_remaining != 0 {
+        outputs
+            .first_mut()
+            .ok_or(Error::EmptyCoinbaseOutputs)?
+            .value = Amount::from_sat(referenced_job.coinbase_tx_value_remaining);
+    }
     let mut template = NewTemplate {
         template_id: 0,
         future_template: false,
@@ -194,11 +201,9 @@ fn new_extended_job(
     extranonce_len: u8,
     ntime: Option<u32>,
 ) -> Result<NewExtendedMiningJob<'static>, Error> {
-    coinbase_outputs[0].value = match new_template.coinbase_tx_value_remaining.checked_mul(1) {
-        //check that value_remaining is updated by TP
-        Some(result) => Amount::from_sat(result),
-        None => return Err(Error::ValueRemainingNotUpdated),
-    };
+    if coinbase_outputs.is_empty() {
+        return Err(Error::EmptyCoinbaseOutputs);
+    }
     let tx_version = new_template
         .coinbase_tx_version
         .try_into()
@@ -206,6 +211,12 @@ fn new_extended_job(
 
     let bip34_bytes = get_bip_34_bytes(new_template, tx_version)?;
     let script_prefix_len = bip34_bytes.len();
+    let script_len = script_prefix_len
+        + usize::from(additional_coinbase_script_data_len)
+        + usize::from(extranonce_len);
+    if !(2..=100).contains(&script_len) {
+        return Err(Error::InvalidCoinbase);
+    }
 
     let coinbase = coinbase(
         bip34_bytes,
@@ -306,15 +317,7 @@ fn get_bip_34_bytes(new_template: &NewTemplate, tx_version: i32) -> Result<Vec<u
         return Ok(vec![]);
     };
 
-    let script_prefix = &new_template.coinbase_prefix.to_vec()[..];
-
-    // Is ok to panic here cause condition will be always true when not in a test chain
-    // (regtest ecc ecc)
-    #[cfg(not(test))]
-    assert!(
-        script_prefix.len() > 2,
-        "Bitcoin blockchain should be at least 16 block long"
-    );
+    let script_prefix = new_template.coinbase_prefix.as_ref();
 
     // Txs version lower or equal to 1 are not allowed in new blocks we need it only to test the
     // JobCreator against old bitcoin blocks
@@ -323,15 +326,26 @@ fn get_bip_34_bytes(new_template: &NewTemplate, tx_version: i32) -> Result<Vec<u
         return Err(Error::TxVersionTooLow);
     };
 
-    //validate_bip34_first_item(script_prefix)?;
-    // add 1 cause 0 is push 1 2 is 1 is push 2 ecc ecc
-    // add 1 cause in the len there is also the op code itself
-    let bip34_len = script_prefix[0] as usize + 2;
-    if bip34_len <= script_prefix.len() {
-        Ok(script_prefix.to_vec())
-    } else {
-        Err(Error::InvalidBip34Bytes(script_prefix.to_vec()))
+    let invalid = || Error::InvalidBip34Bytes(script_prefix.to_vec());
+    match script_prefix.first().copied().ok_or_else(invalid)? {
+        // Small heights use the corresponding script-number opcode.
+        0 | 0x51..=0x60 => {}
+        len @ 1..=5 => {
+            let height = script_prefix
+                .get(1..=usize::from(len))
+                .ok_or_else(invalid)?;
+            let last = height[height.len() - 1];
+            let negative = last & 0x80 != 0;
+            let redundant_zero =
+                last & 0x7f == 0 && (height.len() == 1 || height[height.len() - 2] & 0x80 == 0);
+            let needs_opcode = height.len() == 1 && height[0] <= 16;
+            if negative || redundant_zero || needs_opcode {
+                return Err(invalid());
+            }
+        }
+        _ => return Err(invalid()),
     }
+    Ok(script_prefix.to_vec())
 }
 
 // coinbase_tx_input_script_prefix: extranonce prefix (script length + bip34 block height) provided
@@ -484,16 +498,16 @@ impl StrippedCoinbaseTx {
 
 pub mod tests {
     use super::*;
-    use crate::utils::merkle_root_from_path;
     #[cfg(feature = "prop_test")]
-    use binary_sv2::u256_from_int;
+    use crate::compat::binary_sv2::u256_from_int;
+    use crate::utils::merkle_root_from_path;
     use quickcheck::{Arbitrary, Gen};
-    use std::{cmp, vec};
+    use std::vec;
 
     #[cfg(feature = "prop_test")]
     use std::borrow::BorrowMut;
 
-    use stratum_common::bitcoin::{
+    use crate::compat::stratum_common::bitcoin::{
         consensus::Encodable, secp256k1::Secp256k1, Amount, Network, PrivateKey, PublicKey,
         ScriptBuf, TxOut,
     };
@@ -518,18 +532,10 @@ pub mod tests {
     }
 
     pub fn template_from_gen(g: &mut Gen) -> NewTemplate<'static> {
-        let mut coinbase_prefix_gen = Gen::new(255);
-        let mut coinbase_prefix: vec::Vec<u8> = vec::Vec::new();
-
-        let max_num_for_script_prefix = 253;
-        let prefix_len = cmp::min(u8::arbitrary(&mut coinbase_prefix_gen), 6);
-        coinbase_prefix.push(prefix_len);
-        coinbase_prefix.resize_with(prefix_len as usize + 2, || {
-            cmp::min(
-                u8::arbitrary(&mut coinbase_prefix_gen),
-                max_num_for_script_prefix,
-            )
-        });
+        let coinbase_prefix = bitcoin::script::Builder::new()
+            .push_int(i64::from(u32::arbitrary(g)))
+            .into_script()
+            .into_bytes();
         let coinbase_prefix: binary_sv2::B0255 = coinbase_prefix.try_into().unwrap();
 
         let mut coinbase_tx_outputs_gen = Gen::new(32);
@@ -591,6 +597,42 @@ pub mod tests {
     }
 
     #[test]
+    fn maximum_template_id_is_preserved() {
+        let mut template = new_template_with_coinbase_prefix(vec![2, 0xe8, 3]);
+        template.template_id = u64::MAX;
+        let mut creator = JobsCreators::new(13);
+        let output = TxOut {
+            value: Amount::ZERO,
+            script_pubkey: ScriptBuf::new(),
+        };
+        let job = creator
+            .on_new_template(&mut template, true, vec![output], 0)
+            .unwrap();
+        assert_eq!(creator.get_template_id_from_job(job.job_id), Some(u64::MAX));
+        assert_eq!(
+            creator.on_new_prev_hash(&SetNewPrevHash {
+                template_id: u64::MAX,
+                prev_hash: [0; 32].into(),
+                header_timestamp: 1,
+                n_bits: 0x207fffff,
+                target: [255; 32].into(),
+            }),
+            Some(job.job_id)
+        );
+    }
+
+    #[test]
+    fn malformed_height_with_trailing_data_is_rejected() {
+        for prefix in [vec![], vec![2, 1, 0, 0], vec![1, 0x81, 0], vec![1, 1, 0]] {
+            let template = new_template_with_coinbase_prefix(prefix);
+            assert!(matches!(
+                get_bip_34_bytes(&template, 2),
+                Err(Error::InvalidBip34Bytes(_))
+            ));
+        }
+    }
+
+    #[test]
     fn get_bip_34_bytes_rejects_malformed_first_push() {
         let prefix = vec![0x4c];
         let template = new_template_with_coinbase_prefix(prefix.clone());
@@ -627,13 +669,6 @@ pub mod tests {
     #[cfg(feature = "prop_test")]
     #[quickcheck_macros::quickcheck]
     fn test_job_id_from_template(mut template: NewTemplate<'static>) {
-        let mut prefix = template.coinbase_prefix.to_vec();
-        if prefix.len() > 0 {
-            let len = u8::min(prefix[0], 6);
-            prefix[0] = len;
-            prefix.resize(len as usize + 2, 0);
-            template.coinbase_prefix = prefix.try_into().unwrap();
-        };
         let out = TxOut {
             value: Amount::from_sat(BLOCK_REWARD),
             script_pubkey: ScriptBuf::new_p2pk(&new_pub_key()),

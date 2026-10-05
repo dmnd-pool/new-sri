@@ -26,15 +26,15 @@
 //!   especially in the context of shared state.
 
 use super::SendTo_;
-use crate::{errors::Error, parsers::TemplateDistribution, utils::Mutex};
-use template_distribution_sv2::{
+use crate::compat::template_distribution_sv2::{
     CoinbaseOutputDataSize, NewTemplate, RequestTransactionData, RequestTransactionDataError,
     RequestTransactionDataSuccess, SetNewPrevHash, SubmitSolution,
 };
+use crate::{errors::Error, parsers::TemplateDistribution, utils::Mutex};
 
 /// see [`SendTo_`]
 pub type SendTo = SendTo_<TemplateDistribution<'static>, ()>;
-use const_sv2::*;
+use crate::compat::const_sv2::*;
 use core::convert::TryInto;
 use std::sync::Arc;
 use tracing::{debug, error, info, trace};

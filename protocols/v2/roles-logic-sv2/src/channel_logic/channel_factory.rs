@@ -3,6 +3,7 @@
 //! This module contains logic for creating and managing channels.
 
 use super::extended_to_standard_job;
+use crate::compat::{binary_sv2, mining_sv2};
 use crate::{
     common_properties::StandardChannel,
     job_creator::{self, JobsCreators},
@@ -11,13 +12,16 @@ use crate::{
     Error,
 };
 
-use mining_sv2::{
+use crate::compat::mining_sv2::{
     ExtendedExtranonce, NewExtendedMiningJob, NewMiningJob, OpenExtendedMiningChannelSuccess,
     OpenMiningChannelError, OpenStandardMiningChannelSuccess, SetCustomMiningJob,
     SetCustomMiningJobSuccess, SetExtranoncePrefix, SetNewPrevHash, SubmitSharesError,
     SubmitSharesExtended, SubmitSharesStandard, Target,
 };
 
+use crate::compat::template_distribution_sv2::{
+    NewTemplate, SetNewPrevHash as SetNewPrevHashFromTp,
+};
 use hex::DisplayHex;
 use nohash_hasher::BuildNoHashHasher;
 use std::{
@@ -25,11 +29,10 @@ use std::{
     convert::TryInto,
     sync::Arc,
 };
-use template_distribution_sv2::{NewTemplate, SetNewPrevHash as SetNewPrevHashFromTp};
 
 use tracing::{debug, error, info, trace, warn};
 
-use stratum_common::bitcoin::{
+use crate::compat::stratum_common::bitcoin::{
     block::{Header, Version},
     hash_types,
     hashes::sha256d::Hash,
@@ -319,7 +322,7 @@ impl ChannelFactory {
         is_header_only: bool,
         id: u32,
         additional_coinbase_script_data: Option<&[u8]>,
-    ) -> Result<Vec<Mining>, Error> {
+    ) -> Result<Vec<Mining<'_>>, Error> {
         match is_header_only {
             true => self.new_standard_channel_for_hom_downstream(
                 request_id,
@@ -495,7 +498,7 @@ impl ChannelFactory {
         downstream_hash_rate: f32,
         id: u32,
         additional_coinbase_script_data: Option<&[u8]>,
-    ) -> Result<Vec<Mining>, Error> {
+    ) -> Result<Vec<Mining<'_>>, Error> {
         let hom_group_id = 0;
         let mut result = vec![];
         let channel_id = id;
@@ -561,7 +564,7 @@ impl ChannelFactory {
         downstream_hash_rate: f32,
         group_id: u32,
         additional_coinbase_script_data: Option<&[u8]>,
-    ) -> Result<Vec<Mining>, Error> {
+    ) -> Result<Vec<Mining<'_>>, Error> {
         let mut result = vec![];
         let channel_id = self
             .ids
@@ -1288,14 +1291,14 @@ impl PoolChannelFactory {
         })
     }
 
-    /// Calls [`ChannelFactory::add_standard_channel`]
+    /// Calls `ChannelFactory::add_standard_channel`
     pub fn add_standard_channel(
         &mut self,
         request_id: u32,
         downstream_hash_rate: f32,
         is_header_only: bool,
         id: u32,
-    ) -> Result<Vec<Mining>, Error> {
+    ) -> Result<Vec<Mining<'_>>, Error> {
         self.channel_to_additional_coinbase_script_data
             .insert(id, (self.additional_coinbase_script_data.clone(), None));
         self.inner.add_standard_channel(
@@ -1307,7 +1310,7 @@ impl PoolChannelFactory {
         )
     }
 
-    /// Calls [`ChannelFactory::new_extended_channel`]
+    /// Calls `ChannelFactory::new_extended_channel`
     pub fn new_extended_channel(
         &mut self,
         request_id: u32,
@@ -1437,7 +1440,7 @@ impl PoolChannelFactory {
     }
 
     /// Called only when a new prev hash is received by a Template Provider. It matches the
-    /// message with a `job_id` and calls [`ChannelFactory::on_new_prev_hash`]
+    /// message with a `job_id` and calls `ChannelFactory::on_new_prev_hash`
     /// it return the job_id
     pub fn on_new_prev_hash_from_tp(
         &mut self,
@@ -1769,7 +1772,7 @@ impl PoolChannelFactory {
         self.pool_coinbase_outputs = outs;
     }
 
-    /// Calls [`ChannelFactory::update_target_for_channel`]
+    /// Calls `ChannelFactory::update_target_for_channel`
     /// Set a particular downstream channel target.
     pub fn update_target_for_channel(
         &mut self,
@@ -1844,7 +1847,7 @@ impl PoolChannelFactory {
         &mut self,
         new_data: Vec<u8>,
         channel_id: u32,
-    ) -> Result<Mining, Error> {
+    ) -> Result<Mining<'_>, Error> {
         if self.additional_coinbase_script_data.len() == new_data.len() {
             let mut ids_for_old_data = HashSet::with_hasher(BuildNoHashHasher::default());
             for id in self.inner.id_to_job.keys() {
@@ -1980,25 +1983,25 @@ impl ProxyExtendedChannelFactory {
         }
     }
 
-    /// Calls [`ChannelFactory::add_standard_channel`]
+    /// Calls `ChannelFactory::add_standard_channel`
     pub fn add_standard_channel(
         &mut self,
         request_id: u32,
         downstream_hash_rate: f32,
         id_header_only: bool,
         id: u32,
-    ) -> Result<Vec<Mining>, Error> {
+    ) -> Result<Vec<Mining<'_>>, Error> {
         self.inner
             .add_standard_channel(request_id, downstream_hash_rate, id_header_only, id, None)
     }
 
-    /// Calls [`ChannelFactory::new_extended_channel`]
+    /// Calls `ChannelFactory::new_extended_channel`
     pub fn new_extended_channel(
         &mut self,
         request_id: u32,
         hash_rate: f32,
         min_extranonce_size: u16,
-    ) -> Result<Vec<Mining>, Error> {
+    ) -> Result<Vec<Mining<'_>>, Error> {
         self.inner
             .new_extended_channel(request_id, hash_rate, min_extranonce_size, None)
             .map(|x| x.0)
@@ -2006,7 +2009,7 @@ impl ProxyExtendedChannelFactory {
 
     /// Called only when a new prev hash is received by a Template Provider when job declaration is
     /// used. It matches the message with a `job_id`, creates a new custom job, and calls
-    /// [`ChannelFactory::on_new_prev_hash`]
+    /// `ChannelFactory::on_new_prev_hash`
     pub fn on_new_prev_hash_from_tp(
         &mut self,
         m: &SetNewPrevHashFromTp<'static>,
@@ -2050,7 +2053,7 @@ impl ProxyExtendedChannelFactory {
 
     /// Called only when a new template is received by a Template Provider when job declaration is
     /// used. It creates a new custom job and calls
-    /// [`ChannelFactory::on_new_extended_mining_job`]
+    /// `ChannelFactory::on_new_extended_mining_job`
     #[allow(clippy::type_complexity)]
     pub fn on_new_template(
         &mut self,
@@ -2309,7 +2312,7 @@ impl ProxyExtendedChannelFactory {
         }
     }
 
-    /// Calls [`ChannelFactory::on_new_prev_hash`]
+    /// Calls `ChannelFactory::on_new_prev_hash`
     pub fn on_new_prev_hash(&mut self, m: SetNewPrevHash<'static>) -> Result<(), Error> {
         self.inner.on_new_prev_hash(StagedPhash {
             job_id: m.job_id,
@@ -2319,7 +2322,7 @@ impl ProxyExtendedChannelFactory {
         })
     }
 
-    /// Calls [`ChannelFactory::on_new_extended_mining_job`]
+    /// Calls `ChannelFactory::on_new_extended_mining_job`
     pub fn on_new_extended_mining_job(
         &mut self,
         m: NewExtendedMiningJob<'static>,
@@ -2403,7 +2406,7 @@ impl ProxyExtendedChannelFactory {
         self.inner.extranonces.get_range0_len()
     }
 
-    /// Calls [`ChannelFactory::update_target_for_channel`]
+    /// Calls `ChannelFactory::update_target_for_channel`
     pub fn update_target_for_channel(
         &mut self,
         channel_id: u32,
@@ -2439,9 +2442,9 @@ impl ExtendedChannelKind {
 #[cfg(test)]
 mod test {
     use super::*;
-    use binary_sv2::{Seq0255, B064K, U256};
-    use mining_sv2::OpenStandardMiningChannel;
-    use stratum_common::bitcoin::{Amount, PublicKey, Target, TxOut, WPubkeyHash};
+    use crate::compat::binary_sv2::{Seq0255, B064K, U256};
+    use crate::compat::mining_sv2::OpenStandardMiningChannel;
+    use crate::compat::stratum_common::bitcoin::{Amount, PublicKey, Target, TxOut, WPubkeyHash};
 
     const BLOCK_REWARD: u64 = 2_000_000_000;
 
@@ -2510,9 +2513,7 @@ mod test {
             value: Amount::from_sat(BLOCK_REWARD),
             script_pubkey: decode_hex(COINBASE_OUTPUT).unwrap().into(),
         };
-        stratum_common::bitcoin::consensus::serialize(&out)
-            .try_into()
-            .unwrap()
+        bitcoin::consensus::serialize(&out).try_into().unwrap()
     }
 
     fn get_merkle_path() -> Seq0255<'static, U256<'static>> {

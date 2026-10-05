@@ -5,18 +5,9 @@
 //! management, mutex management, difficulty target calculations, merkle root calculations, and
 //! more.
 
-use binary_sv2::U256;
-use bitcoin::Block;
-use job_declaration_sv2::{DeclareMiningJob, SubmitSolutionJd};
-use primitive_types::U256 as U256Primitive;
-use std::{
-    cmp::max,
-    convert::{TryFrom, TryInto},
-    ops::{Div, Mul},
-    str::FromStr,
-    sync::{Mutex as Mutex_, MutexGuard, PoisonError},
-};
-use stratum_common::{
+use crate::compat::binary_sv2::U256;
+use crate::compat::job_declaration_sv2::{DeclareMiningJob, SubmitSolutionJd};
+use crate::compat::stratum_common::{
     bitcoin,
     bitcoin::{
         blockdata::block::{Header, Version},
@@ -26,6 +17,15 @@ use stratum_common::{
         secp256k1::{All, Secp256k1},
         CompactTarget, PublicKey, ScriptBuf, ScriptHash, Transaction, WScriptHash, XOnlyPublicKey,
     },
+};
+use bitcoin::Block;
+use primitive_types::U256 as U256Primitive;
+use std::{
+    cmp::max,
+    convert::{TryFrom, TryInto},
+    ops::{Div, Mul},
+    str::FromStr,
+    sync::{Mutex as Mutex_, MutexGuard, PoisonError},
 };
 use tracing::error;
 
@@ -161,12 +161,12 @@ impl<T> Mutex<T> {
 ///
 /// ## Components
 /// * `coinbase_tx_prefix`: First part of the coinbase transaction (the part before the extranonce).
-///   Should be converted from [`binary_sv2::B064K`].
+///   Should be converted from [`crate::binary_sv2::B064K`].
 /// * `coinbase_tx_suffix`: Coinbase transaction suffix (the part after the extranonce). Should be
-///   converted from [`binary_sv2::B064K`].
-/// * `extranonce`: Extra nonce space. Should be converted from [`binary_sv2::B032`] and padded with
+///   converted from [`crate::binary_sv2::B064K`].
+/// * `extranonce`: Extra nonce space. Should be converted from [`crate::binary_sv2::B032`] and padded with
 ///   zeros if not `32` bytes long.
-/// * `path`: List of transaction hashes. Should be converted from [`binary_sv2::U256`].
+/// * `path`: List of transaction hashes. Should be converted from [`crate::binary_sv2::U256`].
 pub fn merkle_root_from_path<T: AsRef<[u8]>>(
     coinbase_tx_prefix: &[u8],
     coinbase_tx_suffix: &[u8],
@@ -205,7 +205,7 @@ pub fn merkle_root_from_path<T: AsRef<[u8]>>(
 ///
 /// ## Components
 /// * `coinbase_id`: Coinbase transaction hash.
-/// * `path`: List of transaction hashes. Should be converted from [`binary_sv2::U256`].
+/// * `path`: List of transaction hashes. Should be converted from [`crate::binary_sv2::U256`].
 pub fn merkle_root_from_path_<T: AsRef<[u8]>>(coinbase_id: [u8; 32], path: &[T]) -> [u8; 32] {
     match path.len() {
         0 => coinbase_id,
@@ -919,7 +919,7 @@ impl<'a> From<BlockCreator<'a>> for bitcoin::Block {
 mod tests {
 
     use super::{hash_rate_from_target, hash_rate_to_target, *};
-    use binary_sv2::{Seq0255, B064K, U256};
+    use crate::compat::binary_sv2::{Seq0255, B064K, U256};
     use rand::Rng;
     use serde::Deserialize;
     use std::{convert::TryInto, num::ParseIntError};

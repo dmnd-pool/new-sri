@@ -25,6 +25,11 @@
 //!   Stratum V2 networks.
 
 use super::SendTo_;
+use crate::compat::common_messages_sv2::{
+    ChannelEndpointChanged, SetupConnection, SetupConnectionError, SetupConnectionSuccess,
+};
+use crate::compat::const_sv2;
+use crate::compat::const_sv2::*;
 use crate::{
     common_properties::CommonDownstreamData,
     errors::Error,
@@ -32,10 +37,6 @@ use crate::{
     routing_logic::{CommonRouter, CommonRoutingLogic},
     utils::Mutex,
 };
-use common_messages_sv2::{
-    ChannelEndpointChanged, SetupConnection, SetupConnectionError, SetupConnectionSuccess,
-};
-use const_sv2::*;
 use core::convert::TryInto;
 use std::sync::Arc;
 use tracing::{debug, error, info, trace};
@@ -139,7 +140,7 @@ where
 {
     /// Used to parse a serialized downstream setup connection message into a
     /// [`crate::parsers::CommonMessages::SetupConnection`]
-    fn parse_message(message_type: u8, payload: &mut [u8]) -> Result<SetupConnection, Error> {
+    fn parse_message(message_type: u8, payload: &mut [u8]) -> Result<SetupConnection<'_>, Error> {
         match (message_type, payload).try_into() {
             Ok(CommonMessages::SetupConnection(m)) => Ok(m),
             Ok(CommonMessages::SetupConnectionSuccess(_)) => Err(Error::UnexpectedMessage(

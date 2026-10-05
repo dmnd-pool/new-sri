@@ -6,19 +6,19 @@
 //!   jobs
 //! - determining if submitted shares correlate to valid jobs
 
+use crate::compat::mining_sv2::{
+    NewExtendedMiningJob, NewMiningJob, SetNewPrevHash, SubmitSharesError, SubmitSharesStandard,
+    Target,
+};
 use crate::{
     common_properties::StandardChannel,
     utils::{merkle_root_from_path, Id, Mutex},
     Error,
 };
-use mining_sv2::{
-    NewExtendedMiningJob, NewMiningJob, SetNewPrevHash, SubmitSharesError, SubmitSharesStandard,
-    Target,
-};
 use nohash_hasher::BuildNoHashHasher;
 use std::{collections::HashMap, convert::TryInto, sync::Arc};
 
-use stratum_common::bitcoin::hashes::{sha256d, Hash, HashEngine};
+use crate::compat::stratum_common::bitcoin::hashes::{sha256d, Hash, HashEngine};
 
 /// Used to convert an extended mining job to a standard mining job
 pub fn extended_to_standard_job_for_group_channel<'a>(
@@ -241,6 +241,8 @@ impl GroupChannelJobDispatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::compat::binary_sv2::{u256_from_int, U256};
+    use crate::compat::mining_sv2::Extranonce;
     use crate::{
         errors::Error,
         job_creator::{
@@ -248,12 +250,10 @@ mod tests {
             JobsCreators,
         },
     };
-    use binary_sv2::{u256_from_int, U256};
-    use mining_sv2::Extranonce;
     use quickcheck::{Arbitrary, Gen};
     use std::convert::TryFrom;
 
-    use stratum_common::bitcoin::{Amount, ScriptBuf, TxOut};
+    use crate::compat::stratum_common::bitcoin::{Amount, ScriptBuf, TxOut};
 
     const BLOCK_REWARD: u64 = 625_000_000_000;
 
