@@ -44,7 +44,8 @@ impl<'decoder> From<::job_declaration_sv2::AllocateMiningJobToken<'decoder>>
 message_codec!(
     AllocateMiningJobToken<'decoder>,
     ::job_declaration_sv2::AllocateMiningJobTokenOwned,
-    ::job_declaration_sv2::AllocateMiningJobToken<'decoder>
+    ::job_declaration_sv2::AllocateMiningJobToken<'decoder>,
+    size: [user_identifier, request_id]
 );
 
 impl<'decoder> AllocateMiningJobToken<'decoder> {
@@ -109,7 +110,8 @@ impl<'decoder> From<::job_declaration_sv2::AllocateMiningJobTokenSuccess<'decode
 message_codec!(
     AllocateMiningJobTokenSuccess<'decoder>,
     ::job_declaration_sv2::AllocateMiningJobTokenSuccessOwned,
-    ::job_declaration_sv2::AllocateMiningJobTokenSuccess<'decoder>
+    ::job_declaration_sv2::AllocateMiningJobTokenSuccess<'decoder>,
+    size: [request_id, mining_job_token, coinbase_output]
 );
 
 impl<'decoder> AllocateMiningJobTokenSuccess<'decoder> {
@@ -179,7 +181,8 @@ impl<'decoder> From<::job_declaration_sv2::DeclareMiningJob<'decoder>>
 message_codec!(
     DeclareMiningJob<'decoder>,
     ::job_declaration_sv2::DeclareMiningJobOwned,
-    ::job_declaration_sv2::DeclareMiningJob<'decoder>
+    ::job_declaration_sv2::DeclareMiningJob<'decoder>,
+    size: [request_id, mining_job_token, version, coinbase_prefix, coinbase_suffix, tx_list => sequence, excess_data]
 );
 
 impl<'decoder> DeclareMiningJob<'decoder> {
@@ -246,7 +249,8 @@ impl<'decoder> From<::job_declaration_sv2::DeclareMiningJobSuccess<'decoder>>
 message_codec!(
     DeclareMiningJobSuccess<'decoder>,
     ::job_declaration_sv2::DeclareMiningJobSuccessOwned,
-    ::job_declaration_sv2::DeclareMiningJobSuccess<'decoder>
+    ::job_declaration_sv2::DeclareMiningJobSuccess<'decoder>,
+    size: [request_id, new_mining_job_token]
 );
 
 impl<'decoder> DeclareMiningJobSuccess<'decoder> {
@@ -304,7 +308,8 @@ impl<'decoder> From<::job_declaration_sv2::DeclareMiningJobError<'decoder>>
 message_codec!(
     DeclareMiningJobError<'decoder>,
     ::job_declaration_sv2::DeclareMiningJobErrorOwned,
-    ::job_declaration_sv2::DeclareMiningJobError<'decoder>
+    ::job_declaration_sv2::DeclareMiningJobError<'decoder>,
+    size: [request_id, error_code, error_details]
 );
 
 impl<'decoder> DeclareMiningJobError<'decoder> {
@@ -360,7 +365,8 @@ impl<'decoder> From<::job_declaration_sv2::ProvideMissingTransactions<'decoder>>
 message_codec!(
     ProvideMissingTransactions<'decoder>,
     ::job_declaration_sv2::ProvideMissingTransactionsOwned,
-    ::job_declaration_sv2::ProvideMissingTransactions<'decoder>
+    ::job_declaration_sv2::ProvideMissingTransactions<'decoder>,
+    size: [request_id, unknown_tx_position_list => sequence]
 );
 
 impl<'decoder> ProvideMissingTransactions<'decoder> {
@@ -415,7 +421,8 @@ impl<'decoder> From<::job_declaration_sv2::ProvideMissingTransactionsSuccess<'de
 message_codec!(
     ProvideMissingTransactionsSuccess<'decoder>,
     ::job_declaration_sv2::ProvideMissingTransactionsSuccessOwned,
-    ::job_declaration_sv2::ProvideMissingTransactionsSuccess<'decoder>
+    ::job_declaration_sv2::ProvideMissingTransactionsSuccess<'decoder>,
+    size: [request_id, transaction_list => sequence]
 );
 
 impl<'decoder> ProvideMissingTransactionsSuccess<'decoder> {
@@ -484,7 +491,8 @@ impl<'decoder> From<::job_declaration_sv2::PushSolution<'decoder>> for SubmitSol
 message_codec!(
     SubmitSolutionJd<'decoder>,
     ::job_declaration_sv2::PushSolutionOwned,
-    ::job_declaration_sv2::PushSolution<'decoder>
+    ::job_declaration_sv2::PushSolution<'decoder>,
+    size: [extranonce, prev_hash, nonce, ntime, nbits, version]
 );
 
 impl<'decoder> SubmitSolutionJd<'decoder> {

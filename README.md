@@ -85,12 +85,29 @@ The existing Rust-facing C message wrappers and exported C conversion/free helpe
 are retained as well. Raw C handles retain their ownership contract: owned buffers
 must be freed exactly once.
 
+## Codec performance
+
+Message size calculation adds the sizes of the wire fields. It does not clone
+message data. Encoding writes fields into one vector and adds sequence elements
+to that vector. Messages with additional protocol fields keep the released SRI
+conversion. Extended share decoding reads each field with the released SRI type
+codec. It does not build field marker vectors. Message formats and protocol
+defaults stay the same.
+
+Unit tests in `src/compat/performance_tests.rs` check the allocation limits with
+a 12-node Merkle path, 600 coinbase bytes, and a 28-byte share extranonce. Size
+calculation must allocate no memory. Job encoding, including a clone of the
+input, must use at most 23 allocations. Share decoding must allocate only for
+the owned extranonce. The tests also check incomplete shares and an extranonce
+that exceeds the protocol limit. These checks do not measure network throughput.
+
 ## Verification
 
 ```sh
-cargo fmt --all -- --check
-cargo test --locked
-cargo test --locked --all-features
+rustfmt --edition 2018 --check src/lib.rs
+cargo clippy --lib --all-features -- -D warnings
+cargo test --lib --locked
+cargo test --lib --locked --all-features
 ```
 
 Tests retain the original mining round, channel restoration, fanout, and job

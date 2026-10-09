@@ -35,3 +35,11 @@ pub use compat::{
     template_distribution_sv2,
 };
 pub use errors::Error;
+
+#[cfg(test)]
+mod test_allocator;
+
+#[cfg(test)]
+#[global_allocator]
+static TEST_ALLOCATOR: test_allocator::TestAllocator<std::alloc::System> =
+    test_allocator::TestAllocator(std::alloc::System);

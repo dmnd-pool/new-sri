@@ -11,14 +11,13 @@ pub use crate::compat::ffi::{
     _c_export_setup_conn_succ,
 };
 
-// Binary decoding and encoding are delegated to the released SRI message types.
-// Keeping this bridge in one place avoids maintaining a second wire codec.
+// Decode with the released SRI message types. Encode the listed wire fields
+// with the SRI binary codec, without an intermediate owned message.
 macro_rules! message_codec {
-    ($legacy:ident $(<$life:lifetime>)?, $modern:ty, $wire:ty $(, $decode:item)?) => {
+    ($legacy:ident $(<$life:lifetime>)?, $modern:ty, $wire:ty, size: [$($field:ident $(=> $sequence:ident)?),* $(,)?] $(; $extra:expr)? $(, $decode:item)?) => {
         impl $(<$life>)? ::binary_sv2::GetSize for $legacy $(<$life>)? {
             fn get_size(&self) -> usize {
-                let message: $modern = self.clone().into();
-                ::binary_sv2::GetSize::get_size(&message)
+                0 $(+ ::binary_sv2::GetSize::get_size(&self.$field))* $(+ $extra)?
             }
         }
         impl<'decoder> ::binary_sv2::Decodable<'decoder> for $legacy $(<$life>)? {
@@ -32,11 +31,24 @@ macro_rules! message_codec {
         }
         impl<'decoder> From<$legacy $(<$life>)?> for ::binary_sv2::encodable::EncodableField<'decoder> {
             fn from(value: $legacy $(<$life>)?) -> Self {
-                let message: $modern = value.into();
-                message.into()
+                message_codec!(@encode value, $modern, [$($field $(=> $sequence)?),*] $(; $extra)?)
             }
         }
     };
+    (@encode $value:ident, $modern:ty, [$($field:ident $(=> $sequence:ident)?),*]) => {{
+        let count = 0 $(+ message_codec!(@count $value.$field $(, $sequence)?))*;
+        let mut fields = Vec::with_capacity(count);
+        $(message_codec!(@append fields, $value.$field $(, $sequence)?);)*
+        ::binary_sv2::encodable::EncodableField::Struct(fields)
+    }};
+    (@count $field:expr) => { 1 };
+    (@count $field:expr, sequence) => { 1 + $field.len() };
+    (@append $fields:ident, $field:expr) => { $fields.push($field.into()) };
+    (@append $fields:ident, $field:expr, sequence) => { $field.append_fields(&mut $fields) };
+    (@encode $value:ident, $modern:ty, [$($field:ident),*]; $extra:expr) => {{
+        let message: $modern = $value.into();
+        message.into()
+    }};
 }
 pub(super) use message_codec;
 
@@ -65,7 +77,8 @@ impl From<::common_messages_sv2::ChannelEndpointChangedOwned> for ChannelEndpoin
 message_codec!(
     ChannelEndpointChanged,
     ::common_messages_sv2::ChannelEndpointChangedOwned,
-    ::common_messages_sv2::ChannelEndpointChanged
+    ::common_messages_sv2::ChannelEndpointChanged,
+    size: [channel_id]
 );
 
 impl ChannelEndpointChanged {
@@ -138,7 +151,8 @@ impl<'decoder> From<::common_messages_sv2::SetupConnection<'decoder>>
 message_codec!(
     SetupConnection<'decoder>,
     ::common_messages_sv2::SetupConnectionOwned,
-    ::common_messages_sv2::SetupConnection<'decoder>
+    ::common_messages_sv2::SetupConnection<'decoder>,
+    size: [protocol, min_version, max_version, flags, endpoint_host, endpoint_port, vendor, hardware_version, firmware, device_id]
 );
 
 impl<'decoder> SetupConnection<'decoder> {
@@ -189,7 +203,8 @@ impl From<::common_messages_sv2::SetupConnectionSuccessOwned> for SetupConnectio
 message_codec!(
     SetupConnectionSuccess,
     ::common_messages_sv2::SetupConnectionSuccessOwned,
-    ::common_messages_sv2::SetupConnectionSuccess
+    ::common_messages_sv2::SetupConnectionSuccess,
+    size: [used_version, flags]
 );
 
 impl SetupConnectionSuccess {
@@ -243,7 +258,8 @@ impl<'decoder> From<::common_messages_sv2::SetupConnectionError<'decoder>>
 message_codec!(
     SetupConnectionError<'decoder>,
     ::common_messages_sv2::SetupConnectionErrorOwned,
-    ::common_messages_sv2::SetupConnectionError<'decoder>
+    ::common_messages_sv2::SetupConnectionError<'decoder>,
+    size: [flags, error_code]
 );
 
 impl<'decoder> SetupConnectionError<'decoder> {

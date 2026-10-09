@@ -42,7 +42,8 @@ impl From<::template_distribution_sv2::CoinbaseOutputConstraintsOwned> for Coinb
 message_codec!(
     CoinbaseOutputDataSize,
     ::template_distribution_sv2::CoinbaseOutputConstraintsOwned,
-    ::template_distribution_sv2::CoinbaseOutputConstraints
+    ::template_distribution_sv2::CoinbaseOutputConstraints,
+    size: [coinbase_output_max_additional_size]; 2
 );
 
 impl CoinbaseOutputDataSize {
@@ -116,7 +117,8 @@ impl<'decoder> From<::template_distribution_sv2::NewTemplate<'decoder>> for NewT
 message_codec!(
     NewTemplate<'decoder>,
     ::template_distribution_sv2::NewTemplateOwned,
-    ::template_distribution_sv2::NewTemplate<'decoder>
+    ::template_distribution_sv2::NewTemplate<'decoder>,
+    size: [template_id, future_template, version, coinbase_tx_version, coinbase_prefix, coinbase_tx_input_sequence, coinbase_tx_value_remaining, coinbase_tx_outputs_count, coinbase_tx_outputs, coinbase_tx_locktime, merkle_path => sequence]
 );
 
 impl<'decoder> NewTemplate<'decoder> {
@@ -172,7 +174,8 @@ impl From<::template_distribution_sv2::RequestTransactionDataOwned> for RequestT
 message_codec!(
     RequestTransactionData,
     ::template_distribution_sv2::RequestTransactionDataOwned,
-    ::template_distribution_sv2::RequestTransactionData
+    ::template_distribution_sv2::RequestTransactionData,
+    size: [template_id]
 );
 
 impl RequestTransactionData {
@@ -228,7 +231,8 @@ impl<'decoder> From<::template_distribution_sv2::RequestTransactionDataSuccess<'
 message_codec!(
     RequestTransactionDataSuccess<'decoder>,
     ::template_distribution_sv2::RequestTransactionDataSuccessOwned,
-    ::template_distribution_sv2::RequestTransactionDataSuccess<'decoder>
+    ::template_distribution_sv2::RequestTransactionDataSuccess<'decoder>,
+    size: [template_id, excess_data, transaction_list => sequence]
 );
 
 impl<'decoder> RequestTransactionDataSuccess<'decoder> {
@@ -290,7 +294,8 @@ impl<'decoder> From<::template_distribution_sv2::RequestTransactionDataError<'de
 message_codec!(
     RequestTransactionDataError<'decoder>,
     ::template_distribution_sv2::RequestTransactionDataErrorOwned,
-    ::template_distribution_sv2::RequestTransactionDataError<'decoder>
+    ::template_distribution_sv2::RequestTransactionDataError<'decoder>,
+    size: [template_id, error_code]
 );
 
 impl<'decoder> RequestTransactionDataError<'decoder> {
@@ -349,7 +354,8 @@ impl<'decoder> From<::template_distribution_sv2::SetNewPrevHash<'decoder>>
 message_codec!(
     SetNewPrevHash<'decoder>,
     ::template_distribution_sv2::SetNewPrevHashOwned,
-    ::template_distribution_sv2::SetNewPrevHash<'decoder>
+    ::template_distribution_sv2::SetNewPrevHash<'decoder>,
+    size: [template_id, prev_hash, header_timestamp, n_bits, target]
 );
 
 impl<'decoder> SetNewPrevHash<'decoder> {
@@ -411,7 +417,8 @@ impl<'decoder> From<::template_distribution_sv2::SubmitSolution<'decoder>>
 message_codec!(
     SubmitSolution<'decoder>,
     ::template_distribution_sv2::SubmitSolutionOwned,
-    ::template_distribution_sv2::SubmitSolution<'decoder>
+    ::template_distribution_sv2::SubmitSolution<'decoder>,
+    size: [template_id, version, header_timestamp, header_nonce, coinbase_tx]
 );
 
 impl<'decoder> SubmitSolution<'decoder> {

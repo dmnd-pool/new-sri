@@ -12,3 +12,6 @@ pub mod template_distribution_sv2;
 pub(crate) mod stratum_common {
     pub use bitcoin;
 }
+
+#[cfg(test)]
+mod performance_tests;

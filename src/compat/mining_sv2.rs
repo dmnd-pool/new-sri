@@ -37,7 +37,8 @@ impl<'decoder> From<::mining_sv2::CloseChannel<'decoder>> for CloseChannel<'deco
 message_codec!(
     CloseChannel<'decoder>,
     ::mining_sv2::CloseChannelOwned,
-    ::mining_sv2::CloseChannel<'decoder>
+    ::mining_sv2::CloseChannel<'decoder>,
+    size: [channel_id, reason_code]
 );
 
 impl<'decoder> CloseChannel<'decoder> {
@@ -94,7 +95,8 @@ impl<'decoder> From<::mining_sv2::NewMiningJob<'decoder>> for NewMiningJob<'deco
 message_codec!(
     NewMiningJob<'decoder>,
     ::mining_sv2::NewMiningJobOwned,
-    ::mining_sv2::NewMiningJob<'decoder>
+    ::mining_sv2::NewMiningJob<'decoder>,
+    size: [channel_id, job_id, min_ntime => sequence, version, merkle_root]
 );
 
 impl<'decoder> NewMiningJob<'decoder> {
@@ -165,7 +167,8 @@ impl<'decoder> From<::mining_sv2::NewExtendedMiningJob<'decoder>>
 message_codec!(
     NewExtendedMiningJob<'decoder>,
     ::mining_sv2::NewExtendedMiningJobOwned,
-    ::mining_sv2::NewExtendedMiningJob<'decoder>
+    ::mining_sv2::NewExtendedMiningJob<'decoder>,
+    size: [channel_id, job_id, min_ntime => sequence, version, version_rolling_allowed, merkle_path => sequence, coinbase_tx_prefix, coinbase_tx_suffix]
 );
 
 impl<'decoder> NewExtendedMiningJob<'decoder> {
@@ -239,6 +242,7 @@ message_codec!(
     OpenStandardMiningChannel<'decoder>,
     ::mining_sv2::OpenStandardMiningChannelOwned,
     ::mining_sv2::OpenStandardMiningChannel<'decoder>,
+    size: [request_id, user_identity, nominal_hash_rate, max_target],
     fn from_bytes(data: &'decoder mut [u8]) -> Result<Self, ::binary_sv2::Error> {
         let message =
             <::mining_sv2::OpenStandardMiningChannel<'_> as ::binary_sv2::Decodable>::from_bytes(
@@ -315,6 +319,7 @@ message_codec!(
     OpenStandardMiningChannelSuccess<'decoder>,
     ::mining_sv2::OpenStandardMiningChannelSuccessOwned,
     ::mining_sv2::OpenStandardMiningChannelSuccess<'decoder>,
+    size: [request_id, channel_id, target, extranonce_prefix, group_channel_id],
     fn from_bytes(data: &'decoder mut [u8]) -> Result<Self, ::binary_sv2::Error> {
         let message = <::mining_sv2::OpenStandardMiningChannelSuccess<'_> as ::binary_sv2::Decodable>::from_bytes(data)?.into_owned();
         let mut message = Self::from(message);
@@ -387,7 +392,8 @@ impl<'decoder> From<::mining_sv2::OpenExtendedMiningChannel<'decoder>>
 message_codec!(
     OpenExtendedMiningChannel<'decoder>,
     ::mining_sv2::OpenExtendedMiningChannelOwned,
-    ::mining_sv2::OpenExtendedMiningChannel<'decoder>
+    ::mining_sv2::OpenExtendedMiningChannel<'decoder>,
+    size: [request_id, user_identity, nominal_hash_rate, max_target, min_extranonce_size]
 );
 
 impl<'decoder> OpenExtendedMiningChannel<'decoder> {
@@ -455,7 +461,8 @@ impl<'decoder> From<::mining_sv2::OpenExtendedMiningChannelSuccess<'decoder>>
 message_codec!(
     OpenExtendedMiningChannelSuccess<'decoder>,
     ::mining_sv2::OpenExtendedMiningChannelSuccessOwned,
-    ::mining_sv2::OpenExtendedMiningChannelSuccess<'decoder>
+    ::mining_sv2::OpenExtendedMiningChannelSuccess<'decoder>,
+    size: [request_id, channel_id, target, extranonce_size, extranonce_prefix]; 4
 );
 
 impl<'decoder> OpenExtendedMiningChannelSuccess<'decoder> {
@@ -512,7 +519,8 @@ impl<'decoder> From<::mining_sv2::OpenMiningChannelError<'decoder>>
 message_codec!(
     OpenMiningChannelError<'decoder>,
     ::mining_sv2::OpenMiningChannelErrorOwned,
-    ::mining_sv2::OpenMiningChannelError<'decoder>
+    ::mining_sv2::OpenMiningChannelError<'decoder>,
+    size: [request_id, error_code]
 );
 
 impl<'decoder> OpenMiningChannelError<'decoder> {
@@ -560,7 +568,8 @@ impl<'decoder> From<::common_messages_sv2::Reconnect<'decoder>> for Reconnect<'d
 message_codec!(
     Reconnect<'decoder>,
     ::common_messages_sv2::ReconnectOwned,
-    ::common_messages_sv2::Reconnect<'decoder>
+    ::common_messages_sv2::Reconnect<'decoder>,
+    size: [new_host, new_port]
 );
 
 impl<'decoder> Reconnect<'decoder> {
@@ -648,7 +657,8 @@ impl<'decoder> From<::mining_sv2::SetCustomMiningJob<'decoder>> for SetCustomMin
 message_codec!(
     SetCustomMiningJob<'decoder>,
     ::mining_sv2::SetCustomMiningJobOwned,
-    ::mining_sv2::SetCustomMiningJob<'decoder>
+    ::mining_sv2::SetCustomMiningJob<'decoder>,
+    size: [channel_id, request_id, token, version, prev_hash, min_ntime, nbits, coinbase_tx_version, coinbase_prefix, coinbase_tx_input_n_sequence, coinbase_tx_outputs, coinbase_tx_locktime, merkle_path => sequence]
 );
 
 impl<'decoder> SetCustomMiningJob<'decoder> {
@@ -713,7 +723,8 @@ impl From<::mining_sv2::SetCustomMiningJobSuccessOwned> for SetCustomMiningJobSu
 message_codec!(
     SetCustomMiningJobSuccess,
     ::mining_sv2::SetCustomMiningJobSuccessOwned,
-    ::mining_sv2::SetCustomMiningJobSuccess
+    ::mining_sv2::SetCustomMiningJobSuccess,
+    size: [channel_id, request_id, job_id]
 );
 
 impl SetCustomMiningJobSuccess {
@@ -771,7 +782,8 @@ impl<'decoder> From<::mining_sv2::SetCustomMiningJobError<'decoder>>
 message_codec!(
     SetCustomMiningJobError<'decoder>,
     ::mining_sv2::SetCustomMiningJobErrorOwned,
-    ::mining_sv2::SetCustomMiningJobError<'decoder>
+    ::mining_sv2::SetCustomMiningJobError<'decoder>,
+    size: [channel_id, request_id, error_code]
 );
 
 impl<'decoder> SetCustomMiningJobError<'decoder> {
@@ -820,7 +832,8 @@ impl<'decoder> From<::mining_sv2::SetExtranoncePrefix<'decoder>> for SetExtranon
 message_codec!(
     SetExtranoncePrefix<'decoder>,
     ::mining_sv2::SetExtranoncePrefixOwned,
-    ::mining_sv2::SetExtranoncePrefix<'decoder>
+    ::mining_sv2::SetExtranoncePrefix<'decoder>,
+    size: [channel_id, extranonce_prefix]
 );
 
 impl<'decoder> SetExtranoncePrefix<'decoder> {
@@ -868,7 +881,8 @@ impl<'decoder> From<::mining_sv2::SetGroupChannel<'decoder>> for SetGroupChannel
 message_codec!(
     SetGroupChannel<'decoder>,
     ::mining_sv2::SetGroupChannelOwned,
-    ::mining_sv2::SetGroupChannel<'decoder>
+    ::mining_sv2::SetGroupChannel<'decoder>,
+    size: [group_channel_id, channel_ids => sequence]
 );
 
 impl<'decoder> SetGroupChannel<'decoder> {
@@ -925,7 +939,8 @@ impl<'decoder> From<::mining_sv2::SetNewPrevHash<'decoder>> for SetNewPrevHash<'
 message_codec!(
     SetNewPrevHash<'decoder>,
     ::mining_sv2::SetNewPrevHashOwned,
-    ::mining_sv2::SetNewPrevHash<'decoder>
+    ::mining_sv2::SetNewPrevHash<'decoder>,
+    size: [channel_id, job_id, prev_hash, min_ntime, nbits]
 );
 
 impl<'decoder> SetNewPrevHash<'decoder> {
@@ -976,7 +991,8 @@ impl<'decoder> From<::mining_sv2::SetTarget<'decoder>> for SetTarget<'decoder> {
 message_codec!(
     SetTarget<'decoder>,
     ::mining_sv2::SetTargetOwned,
-    ::mining_sv2::SetTarget<'decoder>
+    ::mining_sv2::SetTarget<'decoder>,
+    size: [channel_id, maximum_target]
 );
 
 impl<'decoder> SetTarget<'decoder> {
@@ -1030,7 +1046,8 @@ impl From<::mining_sv2::SubmitSharesStandardOwned> for SubmitSharesStandard {
 message_codec!(
     SubmitSharesStandard,
     ::mining_sv2::SubmitSharesStandardOwned,
-    ::mining_sv2::SubmitSharesStandard
+    ::mining_sv2::SubmitSharesStandard,
+    size: [channel_id, sequence_number, job_id, nonce, ntime, version]
 );
 
 impl SubmitSharesStandard {
@@ -1099,7 +1116,19 @@ impl<'decoder> From<::mining_sv2::SubmitSharesExtended<'decoder>>
 message_codec!(
     SubmitSharesExtended<'decoder>,
     ::mining_sv2::SubmitSharesExtendedOwned,
-    ::mining_sv2::SubmitSharesExtended<'decoder>
+    ::mining_sv2::SubmitSharesExtended<'decoder>,
+    size: [channel_id, sequence_number, job_id, nonce, ntime, version, extranonce],
+    fn from_bytes(mut data: &'decoder mut [u8]) -> Result<Self, ::binary_sv2::Error> {
+        Ok(Self {
+            channel_id: read_field(&mut data)?,
+            sequence_number: read_field(&mut data)?,
+            job_id: read_field(&mut data)?,
+            nonce: read_field(&mut data)?,
+            ntime: read_field(&mut data)?,
+            version: read_field(&mut data)?,
+            extranonce: read_field(&mut data)?,
+        })
+    }
 );
 
 impl<'decoder> SubmitSharesExtended<'decoder> {
@@ -1152,7 +1181,8 @@ impl From<::mining_sv2::SubmitSharesSuccessOwned> for SubmitSharesSuccess {
 message_codec!(
     SubmitSharesSuccess,
     ::mining_sv2::SubmitSharesSuccessOwned,
-    ::mining_sv2::SubmitSharesSuccess
+    ::mining_sv2::SubmitSharesSuccess,
+    size: [channel_id, last_sequence_number, new_submits_accepted_count, new_shares_sum]
 );
 
 impl SubmitSharesSuccess {
@@ -1205,7 +1235,8 @@ impl<'decoder> From<::mining_sv2::SubmitSharesError<'decoder>> for SubmitSharesE
 message_codec!(
     SubmitSharesError<'decoder>,
     ::mining_sv2::SubmitSharesErrorOwned,
-    ::mining_sv2::SubmitSharesError<'decoder>
+    ::mining_sv2::SubmitSharesError<'decoder>,
+    size: [channel_id, sequence_number, error_code]
 );
 
 impl<'decoder> SubmitSharesError<'decoder> {
@@ -1257,7 +1288,8 @@ impl<'decoder> From<::mining_sv2::UpdateChannel<'decoder>> for UpdateChannel<'de
 message_codec!(
     UpdateChannel<'decoder>,
     ::mining_sv2::UpdateChannelOwned,
-    ::mining_sv2::UpdateChannel<'decoder>
+    ::mining_sv2::UpdateChannel<'decoder>,
+    size: [channel_id, nominal_hash_rate, maximum_target]
 );
 
 impl<'decoder> UpdateChannel<'decoder> {
@@ -1306,7 +1338,8 @@ impl<'decoder> From<::mining_sv2::UpdateChannelError<'decoder>> for UpdateChanne
 message_codec!(
     UpdateChannelError<'decoder>,
     ::mining_sv2::UpdateChannelErrorOwned,
-    ::mining_sv2::UpdateChannelError<'decoder>
+    ::mining_sv2::UpdateChannelError<'decoder>,
+    size: [channel_id, error_code]
 );
 
 impl<'decoder> UpdateChannelError<'decoder> {

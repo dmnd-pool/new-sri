@@ -26,6 +26,17 @@ pub fn to_writer<T: Encodable>(src: T, dst: &mut [u8]) -> Result<(), Error> {
     ::binary_sv2::to_writer(src, dst).map(|_| ())
 }
 
+// Decode a known field with the SRI type codec, without field-marker vectors.
+pub(super) fn read_field<'a, T: Sv2DataType<'a>>(data: &mut &'a mut [u8]) -> Result<T, Error> {
+    let size = T::size_hint(data, 0)?;
+    if size > data.len() {
+        return Err(Error::ReadError(data.len(), size));
+    }
+    let (field, tail) = core::mem::take(data).split_at_mut(size);
+    *data = tail;
+    T::from_bytes_(field)
+}
+
 /// Preserves the legacy integer helper's byte layout.
 pub fn u256_from_int<V: Into<u64>>(value: V) -> U256<'static> {
     let mut bytes = [0; 32];
@@ -419,6 +430,21 @@ macro_rules! sequence_wrapper {
             pub fn is_empty(&self) -> bool {
                 self.0.is_empty()
             }
+            pub fn append_fields<'b>(self, fields: &mut Vec<EncodableField<'b>>)
+            where
+                T: Into<EncodableField<'b>>,
+            {
+                assert!(
+                    self.0.len() <= $max,
+                    "legacy sequence exceeds its length prefix"
+                );
+                if $header == 1 {
+                    fields.push((self.0.len() as u8).into());
+                } else {
+                    fields.push((self.0.len() as u16).into());
+                }
+                fields.extend(self.0.into_iter().map(Into::into));
+            }
         }
         impl<T: LegacyBytes> $name<'_, T> {
             pub fn to_vec(&self) -> Vec<Vec<u8>> {
@@ -488,12 +514,7 @@ macro_rules! sequence_wrapper {
                     "legacy sequence exceeds its length prefix"
                 );
                 let mut fields = Vec::with_capacity(value.0.len() + 1);
-                if $header == 1 {
-                    fields.push((value.0.len() as u8).into());
-                } else {
-                    fields.push((value.0.len() as u16).into());
-                }
-                fields.extend(value.0.into_iter().map(Into::into));
+                value.append_fields(&mut fields);
                 EncodableField::Struct(fields)
             }
         }
@@ -510,6 +531,20 @@ pub type Sv2Option<'a, T> = LegacySv2Option<'a, T>;
 impl<T> LegacySv2Option<'_, T> {
     pub fn new(inner: Option<T>) -> Self {
         Self(inner.into_iter().collect(), PhantomData)
+    }
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+    pub fn append_fields<'a>(self, fields: &mut Vec<EncodableField<'a>>)
+    where
+        T: Into<EncodableField<'a>>,
+    {
+        let inner = self.into_inner();
+        fields.push(u8::from(inner.is_some()).into());
+        fields.extend(inner.into_iter().map(Into::into));
     }
     pub fn into_inner(mut self) -> Option<T> {
         assert!(
@@ -574,9 +609,7 @@ where
 impl<'a, T: Into<EncodableField<'a>>> From<LegacySv2Option<'_, T>> for EncodableField<'a> {
     fn from(value: LegacySv2Option<'_, T>) -> Self {
         let mut fields = Vec::with_capacity(2);
-        let inner = value.into_inner();
-        fields.push(u8::from(inner.is_some()).into());
-        fields.extend(inner.into_iter().map(Into::into));
+        value.append_fields(&mut fields);
         EncodableField::Struct(fields)
     }
 }
