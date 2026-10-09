@@ -53,7 +53,7 @@ impl CoinbaseOutputDataSize {
         }
     }
     pub fn as_static(&self) -> CoinbaseOutputDataSize {
-        self.clone().into_static()
+        (*self).into_static()
     }
 }
 
@@ -185,7 +185,7 @@ impl RequestTransactionData {
         }
     }
     pub fn as_static(&self) -> RequestTransactionData {
-        self.clone().into_static()
+        (*self).into_static()
     }
 }
 

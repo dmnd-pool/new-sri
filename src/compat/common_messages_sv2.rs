@@ -88,7 +88,7 @@ impl ChannelEndpointChanged {
         }
     }
     pub fn as_static(&self) -> ChannelEndpointChanged {
-        self.clone().into_static()
+        (*self).into_static()
     }
 }
 
@@ -215,7 +215,7 @@ impl SetupConnectionSuccess {
         }
     }
     pub fn as_static(&self) -> SetupConnectionSuccess {
-        self.clone().into_static()
+        (*self).into_static()
     }
 }
 

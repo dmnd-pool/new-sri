@@ -36,7 +36,7 @@ pub mod header {
             const MAC_LEN: usize = 16;
             let len = self.0.payload_length();
             let chunk_size = super::SV2_FRAME_CHUNK_SIZE - MAC_LEN;
-            let chunks = len / chunk_size + usize::from(len % chunk_size != 0);
+            let chunks = len.div_ceil(chunk_size);
             len + chunks * MAC_LEN
         }
     }

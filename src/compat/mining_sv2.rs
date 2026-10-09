@@ -1667,39 +1667,39 @@ impl From<&mut ExtendedExtranonce> for Extranonce {
 ///
 /// An ExtendedExtranonce is defined by 3 ranges:
 ///
-///  - range_0: is the range that represents the extended extranonce part that reserved by upstream
-/// relative to P (for most upstreams nodes, e.g. a pool, this is [0..0]) and it is fixed for P.
-///  - range_1: is the range that represents the extended extranonce part reserved to P. P assigns
-/// to every relative downstream an extranonce with different value in the range 1 in the
-/// following way: if D_i is the (i+1)-th downstream that connected to P, then D_i gets from P and
-/// extranonce with range_1=i (note that the concatenation of range_1 and range_1 is the range_0
-/// relative to D_i and range_2 of P is the range_1 of D_i).
-///  - range_2: is the range that P reserve for the downstreams.
+/// - range_0: is the range that represents the extended extranonce part that reserved by upstream
+///   relative to P (for most upstreams nodes, e.g. a pool, this is [0..0]) and it is fixed for P.
+/// - range_1: is the range that represents the extended extranonce part reserved to P. P assigns
+///   to every relative downstream an extranonce with different value in the range 1 in the
+///   following way: if D_i is the (i+1)-th downstream that connected to P, then D_i gets from P and
+///   extranonce with range_1=i (note that the concatenation of range_1 and range_1 is the range_0
+///   relative to D_i and range_2 of P is the range_1 of D_i).
+/// - range_2: is the range that P reserve for the downstreams.
 ///
 ///
 /// In the following examples, we examine the extended extranonce in some cases.
 ///
 /// The user P is the pool.
-///  - range_0 -> 0..0, there is no upstream relative to the pool P, so no space reserved by the
-/// upstream
-///  - range_1 -> 0..16 the pool P increments the first 16 bytes to be sure the each pool's
-/// downstream get a different extranonce or a different extended extranoce search space (more
-/// on that below*)
-///  - range_2 -> 16..32 this bytes are not changed by the pool but are changed by the pool's
-/// downstream
+/// - range_0 -> 0..0, there is no upstream relative to the pool P, so no space reserved by the
+///   upstream
+/// - range_1 -> 0..16 the pool P increments the first 16 bytes to be sure the each pool's
+///   downstream get a different extranonce or a different extended extranoce search space (more
+///   on that below*)
+/// - range_2 -> 16..32 this bytes are not changed by the pool but are changed by the pool's
+///   downstream
 ///
 /// The user P is the translator.
-///  - range_0 -> 0..16 these bytes are set by the pool and P shouldn't change them
-///  - range_1 -> 16..24 these bytes are modified by P each time that a sv1 mining device connect,
-///  so we can be sure that each connected sv1 mining device get a different extended extranonce
-///  search space
-///  - range_2 -> 24..32 these bytes are left free for the sv1 miniing device
+/// - range_0 -> 0..16 these bytes are set by the pool and P shouldn't change them
+/// - range_1 -> 16..24 these bytes are modified by P each time that a sv1 mining device connect,
+///   so we can be sure that each connected sv1 mining device get a different extended extranonce
+///   search space
+/// - range_2 -> 24..32 these bytes are left free for the sv1 miniing device
 ///
 /// The user P is a sv1 mining device.
-///  - range_0 -> 0..24 these byteshadd set by the device's upstreams
-/// range_1 -> 24..32 these bytes are changed by P (if capable) in order to increment the
-/// search space
-/// range_2 -> 32..32 no more downstream
+/// - range_0 -> 0..24 these byteshadd set by the device's upstreams
+/// - range_1 -> 24..32 these bytes are changed by P (if capable) in order to increment the
+///   search space
+/// - range_2 -> 32..32 no more downstream
 ///
 ///
 /// About how the pool work having both extended and standard downstreams:
